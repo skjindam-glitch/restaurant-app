@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(git:*)",
+      "Bash(ls:*)",
+      "Bash(dir:*)",
+      "Bash(type:*)",
+      "Bash(cat:*)",
+      "Bash(./gradlew assembleRelease)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(del /f:*)"
+    ]
+  }
+}

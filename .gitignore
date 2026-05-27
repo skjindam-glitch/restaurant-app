@@ -1,0 +1,49 @@
+# ── .NET / ASP.NET Core ────────────────────────────────────────────────────────
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.swp
+*.sln.DotSettings.user
+publish/
+api-publish/
+
+# user-secrets (never commit these)
+RestoAPI/src/RestoAPI/appsettings.Development.json
+
+# ── Node / React / Vite ────────────────────────────────────────────────────────
+node_modules/
+dist/
+.cache/
+*.tsbuildinfo
+
+# Env files with real secrets — keep .env.production (it has no real secrets)
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ── React Native / Expo / Android ─────────────────────────────────────────────
+Android/node_modules/
+Android/.expo/
+Android/android/build/
+Android/android/app/build/
+Android/android/.gradle/
+Android/android/local.properties
+Android/android/app/release/*.apk
+Android/android/app/release/*.aab
+*.keystore
+!debug.keystore
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.orig
+.idea/
+.vscode/settings.json
+.vscode/*.code-workspace
+
+# ── Azure / CI artifacts ──────────────────────────────────────────────────────
+*.PublishSettings
+*.pubxml.user
