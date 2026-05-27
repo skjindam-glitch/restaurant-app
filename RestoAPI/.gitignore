@@ -1,0 +1,22 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.nupkg
+
+## Rider
+.idea/
+
+## VS Code
+.vscode/
+!.vscode/extensions.json
+
+## Publish artifacts
+publish/
+*.zip
+
+## Secrets — never commit
+appsettings.Production.json
+secrets.json
