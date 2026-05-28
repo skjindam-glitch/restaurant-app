@@ -178,12 +178,12 @@ export default function Tables() {
             <div className="mb-3 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>
           )}
 
-          {/* Single-row filter toolbar */}
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
+          {/* Single-row filter toolbar — never wraps */}
+          <div className="flex items-center gap-2 mb-4 min-w-0">
             <select
               value={zoneFilter}
               onChange={e => setZoneFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-orange-500 cursor-pointer"
+              className="shrink-0 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-orange-500 cursor-pointer"
             >
               {ZONES.map(z => (
                 <option key={z.key} value={z.key}>{z.icon} {z.label}</option>
@@ -193,7 +193,7 @@ export default function Tables() {
             <select
               value={filter}
               onChange={e => setFilter(e.target.value as Filter)}
-              className="px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-orange-500 cursor-pointer"
+              className="shrink-0 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-orange-500 cursor-pointer"
             >
               <option value="all">All Status ({counts.all})</option>
               {(Object.keys(statusConfig) as TableStatus[]).map(s => (
@@ -201,11 +201,11 @@ export default function Tables() {
               ))}
             </select>
 
-            <div className="ml-auto flex gap-2">
+            <div className="ml-auto flex shrink-0 gap-2">
               {canManage && (
                 <button
                   onClick={() => setAddModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 transition"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 transition whitespace-nowrap"
                 >
                   <Plus size={14} />
                   Add Table
@@ -214,7 +214,7 @@ export default function Tables() {
               <button
                 onClick={() => fetchTables(true)}
                 disabled={refreshing}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 transition disabled:opacity-60"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 transition disabled:opacity-60 whitespace-nowrap"
               >
                 <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
                 Refresh
@@ -235,7 +235,7 @@ export default function Tables() {
                   onClick={() => setSelectedId(table.id === selectedId ? null : table.id)}
                   className={`relative p-4 rounded-2xl border-2 cursor-pointer transition-all ${cfg.bg} ${cfg.darkBg} ${
                     selectedId === table.id
-                      ? 'border-orange-500 outline outline-2 outline-orange-400 outline-offset-2'
+                      ? 'border-orange-500 ring-2 ring-inset ring-orange-400 shadow-md shadow-orange-100 dark:shadow-orange-900/30'
                       : ''
                   }`}
                 >
