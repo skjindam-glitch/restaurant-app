@@ -8,6 +8,7 @@ export interface LoginResponse { token: string; expiresAt: string; user: UserPro
 // ── Tables ────────────────────────────────────────────────────────────────────
 export interface ActiveOrderSummary {
   id: number; status: string; orderType: string; subtotal: number; itemCount: number;
+  pendingItems: number; preparingItems: number; readyItems: number;
 }
 export interface TableDto {
   id: number; number: number; seats: number; zone?: string; status: string;

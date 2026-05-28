@@ -77,6 +77,9 @@ public class TableService(AppDbContext db) : ITableService
 
     public async Task<TableDto> CreateAsync(CreateTableRequest request)
     {
+        if (await db.Tables.AnyAsync(t => t.Number == request.Number && t.Zone == request.Zone))
+            throw new InvalidOperationException($"Table {request.Number} already exists in the {request.Zone} zone.");
+
         var table = new RestaurantTable { Number = request.Number, Seats = request.Seats, Zone = request.Zone, Status = "available" };
         db.Tables.Add(table);
         await db.SaveChangesAsync();
@@ -109,11 +112,14 @@ public class TableService(AppDbContext db) : ITableService
             OccupiedSince     = t.OccupiedSince?.ToLocalTime().ToString("HH:mm"),
             ActiveOrders      = allActive.Select(o => new ActiveOrderSummary
             {
-                Id        = o.Id,
-                Status    = o.Status,
-                OrderType = o.OrderType,
-                Subtotal  = o.Items.Sum(i => i.MenuItemPrice * i.Quantity),
-                ItemCount = o.Items.Count,
+                Id             = o.Id,
+                Status         = o.Status,
+                OrderType      = o.OrderType,
+                Subtotal       = o.Items.Sum(i => i.MenuItemPrice * i.Quantity),
+                ItemCount      = o.Items.Count,
+                PendingItems   = o.Items.Count(i => i.KitchenStatus == "pending"),
+                PreparingItems = o.Items.Count(i => i.KitchenStatus == "preparing"),
+                ReadyItems     = o.Items.Count(i => i.KitchenStatus == "ready"),
             }).ToList(),
         };
     }

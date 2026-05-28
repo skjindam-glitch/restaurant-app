@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
 
 const modal = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  backdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
   sheet: { backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' },
   header: { backgroundColor: colors.primary, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },

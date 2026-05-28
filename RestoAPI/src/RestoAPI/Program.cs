@@ -68,6 +68,13 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id=OBJECT_ID('Orders') AND name='OrderType')
             ALTER TABLE Orders ADD OrderType NVARCHAR(20) NOT NULL DEFAULT 'dine-in';");
 
+    // Change table number uniqueness from global to per-zone (allows same number in different zones)
+    db.Database.ExecuteSqlRaw(@"
+        IF EXISTS (SELECT * FROM sys.indexes WHERE name='IX_Tables_Number' AND object_id=OBJECT_ID('Tables'))
+            DROP INDEX IX_Tables_Number ON Tables;
+        IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name='IX_Tables_Number_Zone' AND object_id=OBJECT_ID('Tables'))
+            CREATE UNIQUE INDEX IX_Tables_Number_Zone ON Tables(Number, Zone);");
+
     await SeedData.SeedAsync(db);
 }
 

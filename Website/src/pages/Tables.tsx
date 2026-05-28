@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Clock, User, RefreshCw, X, Plus, ChefHat, MapPin, CreditCard, ShoppingBag } from 'lucide-react';
+import { Users, Clock, User, RefreshCw, X, Plus, ChefHat, MapPin, CreditCard } from 'lucide-react';
 import { TableStatus } from '../types';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -48,6 +48,7 @@ export default function Tables() {
   const [filter, setFilter] = useState<Filter>('all');
   const [zoneFilter, setZoneFilter] = useState('all');
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [kitchenPopup, setKitchenPopup] = useState<TableDto | null>(null);
 
   const [seatModal, setSeatModal] = useState<{ tableId: number; tableNumber: number } | null>(null);
   const [guestCount, setGuestCount] = useState('2');
@@ -177,43 +178,29 @@ export default function Tables() {
             <div className="mb-3 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>
           )}
 
-          {/* Zone Tabs */}
-          <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1">
-            {ZONES.map(z => (
-              <button
-                key={z.key}
-                onClick={() => setZoneFilter(z.key)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
-                  zoneFilter === z.key
-                    ? 'bg-orange-500 text-white'
-                    : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300'
-                }`}
-              >
-                <span>{z.icon}</span>
-                {z.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Status Filters */}
-          <div className="flex items-center gap-2 mb-5 flex-wrap">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition ${filter === 'all' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300'}`}
+          {/* Single-row filter toolbar */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <select
+              value={zoneFilter}
+              onChange={e => setZoneFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-orange-500 cursor-pointer"
             >
-              All <span className="ml-1.5 text-xs opacity-70">{counts.all}</span>
-            </button>
-            {(Object.keys(statusConfig) as TableStatus[]).map(s => (
-              <button
-                key={s}
-                onClick={() => setFilter(s)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${filter === s ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300'}`}
-              >
-                <span className={`w-2 h-2 rounded-full ${statusConfig[s].dot}`} />
-                {statusConfig[s].label}
-                <span className="ml-0.5 text-xs opacity-70">{counts[s]}</span>
-              </button>
-            ))}
+              {ZONES.map(z => (
+                <option key={z.key} value={z.key}>{z.icon} {z.label}</option>
+              ))}
+            </select>
+
+            <select
+              value={filter}
+              onChange={e => setFilter(e.target.value as Filter)}
+              className="px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-orange-500 cursor-pointer"
+            >
+              <option value="all">All Status ({counts.all})</option>
+              {(Object.keys(statusConfig) as TableStatus[]).map(s => (
+                <option key={s} value={s}>{statusConfig[s].label} ({counts[s]})</option>
+              ))}
+            </select>
+
             <div className="ml-auto flex gap-2">
               {canManage && (
                 <button
@@ -236,16 +223,21 @@ export default function Tables() {
           </div>
 
           {/* Grid */}
-          <div className="grid grid-cols-4 gap-4 overflow-y-auto flex-1">
+          <div className="grid grid-cols-4 gap-4 overflow-y-auto flex-1 pb-4">
             {filtered.map(table => {
               const cfg = statusConfig[toStatus(table.status)];
               const orderBadge = table.activeOrderStatus ? orderStatusBadge[table.activeOrderStatus] : null;
               const zoneInfo = ZONES.find(z => z.key === (table.zone || 'ground-floor'));
+              const hasOrders = (table.activeOrders?.length ?? 0) > 0;
               return (
                 <div
                   key={table.id}
                   onClick={() => setSelectedId(table.id === selectedId ? null : table.id)}
-                  className={`relative p-4 rounded-2xl border-2 cursor-pointer transition-all ${cfg.bg} ${cfg.darkBg} ${selectedId === table.id ? 'ring-2 ring-offset-2 ring-orange-500' : ''}`}
+                  className={`relative p-4 rounded-2xl border-2 cursor-pointer transition-all ${cfg.bg} ${cfg.darkBg} ${
+                    selectedId === table.id
+                      ? 'border-orange-500 outline outline-2 outline-orange-400 outline-offset-2'
+                      : ''
+                  }`}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div>
@@ -281,21 +273,24 @@ export default function Tables() {
                     </div>
                   )}
 
-                  {table.activeOrders?.length > 1 ? (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <ChefHat size={11} className="text-gray-500 dark:text-gray-400" />
-                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded-md bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300">
-                        {table.activeOrders.length} orders
-                      </span>
-                    </div>
-                  ) : orderBadge ? (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <ChefHat size={11} className="text-gray-500 dark:text-gray-400" />
-                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded-md ${orderBadge.cls}`}>
-                        {orderBadge.label}
-                      </span>
-                    </div>
-                  ) : null}
+                  {/* Kitchen status — tappable to open popup */}
+                  {hasOrders && (
+                    <button
+                      onClick={e => { e.stopPropagation(); setKitchenPopup(table); }}
+                      className="flex items-center gap-1.5 mt-1.5 hover:opacity-75 transition"
+                    >
+                      <ChefHat size={11} className="text-gray-500 dark:text-gray-400 shrink-0" />
+                      {table.activeOrders.length > 1 ? (
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded-md bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300">
+                          {table.activeOrders.length} orders ›
+                        </span>
+                      ) : orderBadge ? (
+                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded-md ${orderBadge.cls}`}>
+                          {orderBadge.label} ›
+                        </span>
+                      ) : null}
+                    </button>
+                  )}
 
                   {table.status === 'available' && (
                     <button
@@ -360,36 +355,23 @@ export default function Tables() {
                     <span className="font-medium dark:text-white">{selected.occupiedSince}</span>
                   </div>
                 )}
-                {selected.activeOrderId && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">Order #</span>
-                    <span className="font-medium dark:text-white">#{selected.activeOrderId}</span>
-                  </div>
-                )}
-                {selected.activeOrderStatus && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">Order Status</span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${orderStatusBadge[selected.activeOrderStatus]?.cls}`}>
-                      {orderStatusBadge[selected.activeOrderStatus]?.label}
-                    </span>
-                  </div>
-                )}
               </div>
 
               <div className="space-y-3">
-                {/* ── Active Orders list ── */}
+                {/* Active Orders with customer labels */}
                 {selected.activeOrders?.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                       Active Orders
                     </p>
-                    {selected.activeOrders.map(order => {
+                    {selected.activeOrders.map((order, index) => {
                       const badge = orderStatusBadge[order.status];
                       const typeLabel: Record<string, string> = { 'dine-in': 'Dine-in', 'takeaway': 'Takeaway', 'online': 'Online' };
                       return (
                         <div key={order.id} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 border border-gray-100 dark:border-gray-600">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-orange-500 bg-orange-50 dark:bg-orange-900/30 px-1.5 py-0.5 rounded-md">C{index + 1}</span>
                               <span className="text-sm font-bold text-gray-900 dark:text-white">#{order.id}</span>
                               <span className="text-xs text-gray-400">{typeLabel[order.orderType] ?? order.orderType}</span>
                             </div>
@@ -399,50 +381,71 @@ export default function Tables() {
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center justify-between mb-2.5">
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                              {order.itemCount} item{order.itemCount !== 1 ? 's' : ''}
-                            </span>
-                            <span className="text-sm font-semibold text-orange-500">
-                              ₹{Number(order.subtotal).toLocaleString()}
-                            </span>
-                          </div>
-                          {order.status !== 'billing' ? (
-                            <button
-                              onClick={() => generateBill(order.id)}
-                              disabled={actionLoading}
-                              className="w-full py-1.5 bg-purple-500 text-white text-xs font-semibold rounded-lg hover:bg-purple-600 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
-                            >
-                              <CreditCard size={12} />
-                              Generate Bill
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => navigate(`/billing?orderId=${order.id}`)}
-                              className="w-full py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-1.5"
-                            >
-                              <CreditCard size={12} />
-                              Process Payment
-                            </button>
+
+                          {/* Kitchen item breakdown */}
+                          {order.itemCount > 0 && (
+                            <div className="flex items-center gap-1.5 mb-2">
+                              {order.pendingItems > 0 && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300">⏳ {order.pendingItems}</span>
+                              )}
+                              {order.preparingItems > 0 && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300">🔥 {order.preparingItems}</span>
+                              )}
+                              {order.readyItems > 0 && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300">✓ {order.readyItems}</span>
+                              )}
+                              <span className="text-xs text-gray-400 ml-auto">₹{Number(order.subtotal).toLocaleString()}</span>
+                            </div>
                           )}
+
+                          <div className="flex gap-1.5">
+                            {order.status !== 'billing' && (
+                              <button
+                                onClick={() => navigate(`/orders?tableId=${selected.id}&orderId=${order.id}`)}
+                                className="flex-1 py-1.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs font-semibold rounded-lg hover:bg-orange-200 dark:hover:bg-orange-900/50 transition flex items-center justify-center gap-1"
+                              >
+                                <Plus size={11} />
+                                Add Items
+                              </button>
+                            )}
+                            {order.status !== 'billing' ? (
+                              <button
+                                onClick={() => generateBill(order.id)}
+                                disabled={actionLoading}
+                                className="flex-1 py-1.5 bg-purple-500 text-white text-xs font-semibold rounded-lg hover:bg-purple-600 transition disabled:opacity-50 flex items-center justify-center gap-1"
+                              >
+                                <CreditCard size={11} />
+                                Bill
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => navigate(`/billing?orderId=${order.id}`)}
+                                className="w-full py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-1.5"
+                              >
+                                <CreditCard size={11} />
+                                Process Payment
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 )}
 
-                {/* ── New order for occupied table ── */}
+                {/* Add order / new customer */}
                 {(selected.status === 'occupied' || selected.status === 'billing' || selected.status === 'ready') && (
                   <button
                     onClick={() => newOrderForTable(selected.id)}
                     className="w-full py-2.5 bg-orange-500 text-white text-sm font-medium rounded-xl hover:bg-orange-600 transition flex items-center justify-center gap-2"
                   >
                     <Plus size={15} />
-                    {selected.activeOrders?.length > 0 ? 'New Order (2nd Customer)' : 'Add Order'}
+                    {selected.activeOrders?.length > 0
+                      ? `New Order — Customer ${selected.activeOrders.length + 1}`
+                      : 'Add Order'}
                   </button>
                 )}
 
-                {/* ── Other status actions ── */}
                 {selected.status === 'available' && (
                   <button
                     onClick={() => setSeatModal({ tableId: selected.id, tableNumber: selected.number })}
@@ -481,6 +484,68 @@ export default function Tables() {
           )}
         </div>
       </div>
+
+      {/* Kitchen Status Popup */}
+      {kitchenPopup && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <ChefHat size={18} className="text-orange-500" />
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                  Table {kitchenPopup.number} — Kitchen
+                </h3>
+              </div>
+              <button onClick={() => setKitchenPopup(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {kitchenPopup.activeOrders.map((order, i) => {
+                const badge = orderStatusBadge[order.status];
+                return (
+                  <div key={order.id} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="text-xs font-bold text-orange-500 mb-0.5">Customer {i + 1}</p>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                          Order #{order.id} · {order.itemCount} item{order.itemCount !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      {badge && (
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.cls}`}>
+                          {badge.label}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {order.pendingItems > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">⏳ {order.pendingItems} pending</span>
+                      )}
+                      {order.preparingItems > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300">🔥 {order.preparingItems} cooking</span>
+                      )}
+                      {order.readyItems > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300">✓ {order.readyItems} ready</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {kitchenPopup.activeOrders.length} order{kitchenPopup.activeOrders.length !== 1 ? 's' : ''} active
+              </span>
+              <span className="text-base font-bold text-orange-500">
+                ₹{kitchenPopup.activeOrders.reduce((s, o) => s + Number(o.subtotal), 0).toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Seat Guests Modal */}
       {seatModal && (

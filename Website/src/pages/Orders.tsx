@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Minus, Trash2, Search, ChevronDown, Leaf, Drumstick, CheckCircle, AlertCircle } from 'lucide-react';
 import { api } from '../api/client';
-import type { MenuItemDto, TableDto, CreateOrderRequest } from '../api/types';
+import type { MenuItemDto, TableDto, CreateOrderRequest, OrderDto } from '../api/types';
 
 interface CartItem {
   menuItemId: number;
@@ -26,18 +26,25 @@ export default function Orders() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [existingOrder, setExistingOrder] = useState<OrderDto | null>(null);
+
+  const orderIdParam = searchParams.get('orderId');
+  const isAddMode = !!orderIdParam;
 
   useEffect(() => {
     const tableIdParam = searchParams.get('tableId');
-    Promise.all([
+    const promises: Promise<unknown>[] = [
       api.get<MenuItemDto[]>('/api/menu'),
       api.get<string[]>('/api/menu/categories'),
       api.get<TableDto[]>('/api/tables'),
-    ])
-      .then(([items, cats, tbls]) => {
-        setMenuItems(items);
-        setCategories(['All', ...cats]);
-        const available = tbls.filter(t => t.status === 'available' || t.status === 'occupied');
+    ];
+    if (orderIdParam) promises.push(api.get<OrderDto>(`/api/orders/${orderIdParam}`));
+
+    Promise.all(promises)
+      .then(([items, cats, tbls, existingOrd]) => {
+        setMenuItems(items as MenuItemDto[]);
+        setCategories(['All', ...(cats as string[])]);
+        const available = (tbls as TableDto[]).filter(t => t.status === 'available' || t.status === 'occupied');
         setTables(available);
         if (tableIdParam) {
           const preSelected = available.find(t => t.id === Number(tableIdParam));
@@ -46,10 +53,11 @@ export default function Orders() {
         } else if (available.length > 0) {
           setSelectedTableId(available[0].id);
         }
+        if (existingOrd) setExistingOrder(existingOrd as OrderDto);
       })
       .catch(err => setError((err as Error).message))
       .finally(() => setLoading(false));
-  }, [searchParams]);
+  }, [searchParams, orderIdParam]);
 
   const filtered = menuItems.filter(item => {
     const matchCat = activeCategory === 'All' || item.category === activeCategory;
@@ -82,20 +90,29 @@ export default function Orders() {
   const total = subtotal + tax + serviceCharge;
 
   const sendToKitchen = async () => {
-    if (cart.length === 0 || !selectedTableId) return;
+    if (cart.length === 0) return;
     setSubmitting(true);
     setError('');
     setSuccess('');
     try {
-      const body: CreateOrderRequest = {
-        tableId: selectedTableId,
-        items: cart.map(c => ({ menuItemId: c.menuItemId, quantity: c.quantity, notes: c.notes || undefined })),
-        orderType,
-      };
-      const order = await api.post<{ id: number }>('/api/orders', body);
-      await api.post(`/api/orders/${order.id}/send-to-kitchen`, {});
-      setCart([]);
-      setSuccess(`Order #${order.id} sent to kitchen!`);
+      if (isAddMode && orderIdParam) {
+        await api.post(`/api/orders/${orderIdParam}/add-items`, {
+          items: cart.map(c => ({ menuItemId: c.menuItemId, quantity: c.quantity, notes: c.notes || undefined })),
+        });
+        setCart([]);
+        setSuccess(`${cart.reduce((s, c) => s + c.quantity, 0)} item${cart.reduce((s, c) => s + c.quantity, 0) !== 1 ? 's' : ''} added to Order #${orderIdParam}!`);
+      } else {
+        if (!selectedTableId) return;
+        const body: CreateOrderRequest = {
+          tableId: selectedTableId,
+          items: cart.map(c => ({ menuItemId: c.menuItemId, quantity: c.quantity, notes: c.notes || undefined })),
+          orderType,
+        };
+        const order = await api.post<{ id: number }>('/api/orders', body);
+        await api.post(`/api/orders/${order.id}/send-to-kitchen`, {});
+        setCart([]);
+        setSuccess(`Order #${order.id} sent to kitchen!`);
+      }
       setTimeout(() => setSuccess(''), 4000);
     } catch (err) {
       setError((err as Error).message);
@@ -223,19 +240,21 @@ export default function Orders() {
         <div className="p-5 border-b border-gray-100 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white">Current Order</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                {isAddMode ? `Add to Order #${orderIdParam}` : 'Current Order'}
+              </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {selectedTable ? `T${selectedTable.number}` : '—'} • {cart.length} item{cart.length !== 1 ? 's' : ''}
+                {selectedTable ? `T${selectedTable.number}` : '—'} • {cart.length} new item{cart.length !== 1 ? 's' : ''}
               </p>
             </div>
             {cart.length > 0 && (
-              <button onClick={() => setCart([])} className="text-xs text-red-500 hover:text-red-600 font-medium">Clear all</button>
+              <button onClick={() => setCart([])} className="text-xs text-red-500 hover:text-red-600 font-medium">Clear</button>
             )}
           </div>
         </div>
 
-        {/* Order Type */}
-        <div className="px-5 py-2.5 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
+        {/* Order Type — hidden in add-items mode since order type is already set */}
+        {!isAddMode && <div className="px-5 py-2.5 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
           {[
             { value: 'dine-in', label: '🪑 Dine-in' },
             { value: 'takeaway', label: '🛍️ Takeaway' },
@@ -249,7 +268,7 @@ export default function Orders() {
               {t.label}
             </button>
           ))}
-        </div>
+        </div>}
 
         {/* Success banner */}
         {success && (
@@ -261,12 +280,31 @@ export default function Orders() {
 
         {/* Cart Items */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* Already-ordered items (locked, read-only) */}
+          {isAddMode && existingOrder && existingOrder.items.length > 0 && (
+            <div className="mb-1">
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Already in Kitchen</p>
+              <div className="space-y-1.5 opacity-60 mb-3">
+                {existingOrder.items.map(item => (
+                  <div key={item.id} className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{item.name} ×{item.quantity}</p>
+                      <p className="text-xs text-gray-400">{item.kitchenStatus}</p>
+                    </div>
+                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 ml-2">₹{(item.price * item.quantity).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs font-semibold text-orange-500 uppercase tracking-widest mb-2">Add New Items</p>
+            </div>
+          )}
+
           {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center py-12">
+            <div className="flex flex-col items-center justify-center h-full text-center py-8">
               <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mb-3">
                 <Plus size={20} className="text-gray-400" />
               </div>
-              <p className="text-sm text-gray-500 font-medium">No items yet</p>
+              <p className="text-sm text-gray-500 font-medium">No new items</p>
               <p className="text-xs text-gray-400 mt-1">Add items from the menu</p>
             </div>
           ) : (
@@ -316,11 +354,11 @@ export default function Orders() {
             </div>
             <button
               onClick={sendToKitchen}
-              disabled={submitting || !selectedTableId}
+              disabled={submitting || (!isAddMode && !selectedTableId)}
               className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-semibold rounded-xl transition mt-2 text-sm flex items-center justify-center gap-2"
             >
               {submitting && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              {submitting ? 'Sending…' : 'Send to Kitchen'}
+              {submitting ? (isAddMode ? 'Adding…' : 'Sending…') : (isAddMode ? `Add to Order #${orderIdParam}` : 'Send to Kitchen')}
             </button>
           </div>
         )}

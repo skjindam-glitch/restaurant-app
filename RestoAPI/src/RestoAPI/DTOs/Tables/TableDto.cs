@@ -7,6 +7,9 @@ public class ActiveOrderSummary
     public string OrderType { get; set; } = "dine-in";
     public decimal Subtotal { get; set; }
     public int ItemCount { get; set; }
+    public int PendingItems { get; set; }
+    public int PreparingItems { get; set; }
+    public int ReadyItems { get; set; }
 }
 
 public class TableDto

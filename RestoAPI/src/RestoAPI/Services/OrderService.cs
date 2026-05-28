@@ -11,6 +11,7 @@ public interface IOrderService
     Task<OrderDto?> GetByIdAsync(int id);
     Task<OrderDto> CreateAsync(int serverId, CreateOrderRequest request);
     Task<OrderDto?> UpdateItemsAsync(int id, UpdateOrderItemsRequest request);
+    Task<OrderDto?> AddItemsAsync(int id, AddOrderItemsRequest request);
     Task<OrderDto?> SendToKitchenAsync(int id);
     Task<OrderDto?> UpdateStatusAsync(int id, string status);
 }
@@ -104,6 +105,31 @@ public class OrderService(AppDbContext db) : IOrderService
             Notes         = i.Notes,
         }).ToList();
 
+        order.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return await GetByIdAsync(id);
+    }
+
+    public async Task<OrderDto?> AddItemsAsync(int id, AddOrderItemsRequest request)
+    {
+        var order = await db.Orders.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == id);
+        if (order is null) return null;
+
+        var menuItemIds = request.Items.Select(i => i.MenuItemId).ToList();
+        var menuItems   = await db.MenuItems.Where(m => menuItemIds.Contains(m.Id)).ToDictionaryAsync(m => m.Id);
+
+        var newItems = request.Items.Select(i => new OrderItem
+        {
+            OrderId       = id,
+            MenuItemId    = i.MenuItemId,
+            MenuItemName  = menuItems[i.MenuItemId].Name,
+            MenuItemPrice = menuItems[i.MenuItemId].Price,
+            Quantity      = i.Quantity,
+            KitchenStatus = "pending",
+            Notes         = i.Notes,
+        }).ToList();
+
+        db.OrderItems.AddRange(newItems);
         order.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return await GetByIdAsync(id);

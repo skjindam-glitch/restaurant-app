@@ -51,3 +51,8 @@ public class UpdateOrderItemsRequest
 {
     public List<OrderItemRequest> Items { get; set; } = [];
 }
+
+public class AddOrderItemsRequest
+{
+    public List<OrderItemRequest> Items { get; set; } = [];
+}

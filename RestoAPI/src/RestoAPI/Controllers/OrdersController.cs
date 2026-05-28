@@ -51,6 +51,15 @@ public class OrdersController(IOrderService orderService) : ControllerBase
         return order is null ? NotFound() : Ok(order);
     }
 
+    /// <summary>Append new items to an existing order without touching items already in kitchen.</summary>
+    [HttpPost("{id:int}/add-items")]
+    [Authorize(Roles = "manager,server,cashier,admin")]
+    public async Task<IActionResult> AddItems(int id, [FromBody] AddOrderItemsRequest request)
+    {
+        var order = await orderService.AddItemsAsync(id, request);
+        return order is null ? NotFound() : Ok(order);
+    }
+
     [HttpPatch("{id:int}/status")]
     [Authorize(Roles = "manager,admin")]
     public async Task<IActionResult> UpdateStatus(int id, [FromQuery] string status)

@@ -18,7 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     {
         // Unique constraints
         model.Entity<User>().HasIndex(u => u.Email).IsUnique();
-        model.Entity<RestaurantTable>().HasIndex(t => t.Number).IsUnique();
+        model.Entity<RestaurantTable>().HasIndex(t => new { t.Number, t.Zone }).IsUnique();
 
         // Decimal precision for all money columns
         model.Entity<MenuItem>().Property(m => m.Price).HasPrecision(10, 2);

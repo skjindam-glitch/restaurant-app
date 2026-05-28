@@ -28,7 +28,7 @@ const orderStatusBadge: Record<string, { label: string; color: string; bg: strin
 };
 
 const ZONES = [
-  { key: 'all',          label: 'All',          icon: '🏠' },
+  { key: 'all',          label: 'All Zones',    icon: '🏠' },
   { key: 'ground-floor', label: 'Ground Floor', icon: '🪑' },
   { key: 'first-floor',  label: 'First Floor',  icon: '🏢' },
   { key: 'garden',       label: 'Garden',       icon: '🌿' },
@@ -37,13 +37,13 @@ const ZONES = [
   { key: 'bar',          label: 'Bar Area',     icon: '🍹' },
 ];
 
-const filters = [
-  { key: 'all',       label: 'All'       },
-  { key: 'available', label: 'Available' },
-  { key: 'occupied',  label: 'Occupied'  },
-  { key: 'reserved',  label: 'Reserved'  },
-  { key: 'billing',   label: 'Billing'   },
-  { key: 'dirty',     label: 'Cleaning'  },
+const STATUS_FILTERS = [
+  { key: 'all',       label: 'All Status'    },
+  { key: 'available', label: 'Available'     },
+  { key: 'occupied',  label: 'Occupied'      },
+  { key: 'reserved',  label: 'Reserved'      },
+  { key: 'billing',   label: 'Billing'       },
+  { key: 'dirty',     label: 'Cleaning'      },
 ];
 
 const NEW_ZONES = ZONES.filter(z => z.key !== 'all');
@@ -61,6 +61,13 @@ export default function TablesScreen() {
   const [zoneFilter, setZoneFilter] = useState('all');
   const [selected, setSelected] = useState<TableDto | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Picker state for compact filter dropdowns
+  const [zonePickerOpen, setZonePickerOpen] = useState(false);
+  const [statusPickerOpen, setStatusPickerOpen] = useState(false);
+
+  // Kitchen popup state
+  const [kitchenPopup, setKitchenPopup] = useState<TableDto | null>(null);
 
   // Seat guests modal
   const [seatModal, setSeatModal] = useState<{ tableId: number; tableNumber: number } | null>(null);
@@ -146,7 +153,7 @@ export default function TablesScreen() {
   const generateBill = async (orderId: number) => {
     setActionLoading(true);
     try {
-      await api.patch(`/api/orders/${orderId}/status?status=billing`);
+      await api.patch(`/api/orders/${orderId}/status?status=billing`, {});
       await fetchTables();
     } catch { /* ignore */ } finally {
       setActionLoading(false);
@@ -155,6 +162,9 @@ export default function TablesScreen() {
 
   let filtered = filter === 'all' ? tables : tables.filter(t => t.status === filter);
   if (zoneFilter !== 'all') filtered = filtered.filter(t => (t.zone || 'ground-floor') === zoneFilter);
+
+  const selectedZoneLabel = ZONES.find(z => z.key === zoneFilter);
+  const selectedStatusLabel = STATUS_FILTERS.find(f => f.key === filter);
 
   if (loading) {
     return (
@@ -166,43 +176,44 @@ export default function TablesScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: c.bg }]}>
-      {/* Zone Filter */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={[styles.zoneBar, { backgroundColor: c.header, borderBottomColor: c.headerBorder }]}
-        contentContainerStyle={styles.zoneContent}
-      >
-        {ZONES.map(z => (
-          <TouchableOpacity
-            key={z.key}
-            onPress={() => setZoneFilter(z.key)}
-            style={[styles.zoneBtn, { backgroundColor: c.chipBg }, zoneFilter === z.key && styles.zoneBtnActive]}
-          >
-            <Text style={styles.zoneIcon}>{z.icon}</Text>
-            <Text style={[styles.zoneText, { color: c.textSecondary }, zoneFilter === z.key && styles.zoneTextActive]}>{z.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* Compact single-row filter bar */}
+      <View style={[styles.filterRow, { backgroundColor: c.header, borderBottomColor: c.headerBorder }]}>
+        {/* Zone dropdown pill */}
+        <TouchableOpacity
+          style={[styles.dropdownPill, { backgroundColor: c.chipBg, borderColor: c.cardBorder }]}
+          onPress={() => setZonePickerOpen(true)}
+        >
+          <Text style={styles.dropdownIcon}>{selectedZoneLabel?.icon ?? '🏠'}</Text>
+          <Text style={[styles.dropdownText, { color: c.textSecondary }]} numberOfLines={1}>
+            {selectedZoneLabel?.label ?? 'All Zones'}
+          </Text>
+          <Text style={[styles.dropdownArrow, { color: c.textMuted }]}>▾</Text>
+        </TouchableOpacity>
 
-      {/* Status Filter */}
-      <View style={[styles.statusRow, { backgroundColor: c.header, borderBottomColor: c.headerBorder }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusContent}>
-          {filters.map(f => (
-            <TouchableOpacity
-              key={f.key}
-              onPress={() => setFilter(f.key)}
-              style={[styles.filterBtn, { backgroundColor: c.chipBg }, filter === f.key && { backgroundColor: c.activeChipBg }]}
-            >
-              <Text style={[styles.filterText, { color: c.textSecondary }, filter === f.key && { color: c.activeChipText }]}>{f.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* Status dropdown pill */}
+        <TouchableOpacity
+          style={[styles.dropdownPill, { backgroundColor: c.chipBg, borderColor: c.cardBorder }]}
+          onPress={() => setStatusPickerOpen(true)}
+        >
+          <Text style={[styles.dropdownText, { color: c.textSecondary }]} numberOfLines={1}>
+            {selectedStatusLabel?.label ?? 'All Status'}
+          </Text>
+          <Text style={[styles.dropdownArrow, { color: c.textMuted }]}>▾</Text>
+        </TouchableOpacity>
+
+        <View style={{ flex: 1 }} />
+
         {canManage && (
           <TouchableOpacity style={styles.addBtn} onPress={() => setAddModal(true)}>
             <Text style={styles.addBtnText}>+ Add</Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          style={[styles.refreshPill, { backgroundColor: c.chipBg, borderColor: c.cardBorder }]}
+          onPress={() => fetchTables(true)}
+        >
+          <Text style={[styles.refreshPillText, { color: c.textSecondary }]}>{refreshing ? '⟳' : '↻'}</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Table Grid */}
@@ -218,6 +229,7 @@ export default function TablesScreen() {
           const isSelected = selected?.id === item.id;
           const orderCount = item.activeOrders?.length ?? 0;
           const zoneInfo = ZONES.find(z => z.key === (item.zone || 'ground-floor'));
+          const firstOrderBadge = orderCount === 1 ? orderStatusBadge[item.activeOrders[0].status] : null;
           return (
             <TouchableOpacity
               style={[styles.tableCard, { backgroundColor: cfg.bg }, isSelected && styles.tableCardSelected]}
@@ -242,6 +254,26 @@ export default function TablesScreen() {
               )}
               {item.serverName && <Text style={[styles.tableMeta, { color: c.textMuted }]}>👤 {item.serverName}</Text>}
               {item.occupiedSince && <Text style={[styles.tableMeta, { color: c.textMuted }]}>🕐 Since {item.occupiedSince}</Text>}
+
+              {/* Kitchen status badge — tappable */}
+              {orderCount > 0 && (
+                <TouchableOpacity
+                  style={styles.kitchenBadgeRow}
+                  onPress={() => setKitchenPopup(item)}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text style={styles.chefEmoji}>👨‍🍳</Text>
+                  {orderCount > 1 ? (
+                    <View style={[styles.kitchenBadgePill, { backgroundColor: '#fff7ed' }]}>
+                      <Text style={[styles.kitchenBadgeText, { color: colors.primary }]}>{orderCount} orders ›</Text>
+                    </View>
+                  ) : firstOrderBadge ? (
+                    <View style={[styles.kitchenBadgePill, { backgroundColor: firstOrderBadge.bg }]}>
+                      <Text style={[styles.kitchenBadgeText, { color: firstOrderBadge.color }]}>{firstOrderBadge.label} ›</Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              )}
 
               {item.status === 'available' && (
                 <TouchableOpacity
@@ -305,41 +337,84 @@ export default function TablesScreen() {
                   </View>
                 )}
 
-                {/* Active Orders */}
+                {/* Active Orders with customer labels */}
                 {(selected.activeOrders?.length ?? 0) > 0 && (
                   <View style={styles.ordersSection}>
                     <Text style={[styles.ordersSectionTitle, { color: c.textMuted }]}>Active Orders</Text>
-                    {selected.activeOrders.map(o => {
+                    {selected.activeOrders.map((o, index) => {
                       const badge = orderStatusBadge[o.status];
+                      const hasCounts = (o.pendingItems ?? 0) > 0 || (o.preparingItems ?? 0) > 0 || (o.readyItems ?? 0) > 0;
                       return (
                         <View key={o.id} style={[styles.orderCard, { backgroundColor: c.inputBg, borderColor: c.cardBorder }]}>
-                          <View style={styles.orderCardLeft}>
-                            <Text style={styles.orderCardId}>#{o.id}</Text>
-                            <View style={[styles.orderTypePill, { backgroundColor: '#fff7ed' }]}>
-                              <Text style={styles.orderTypePillText}>
-                                {o.orderType === 'dine-in' ? '🍽' : o.orderType === 'takeaway' ? '🛵' : '🌐'}  {o.orderType}
-                              </Text>
+                          {/* Top row: left info + right amounts */}
+                          <View style={styles.orderCardMain}>
+                            <View style={styles.orderCardLeft}>
+                              <View style={styles.customerLabelRow}>
+                                <View style={styles.customerBadge}>
+                                  <Text style={styles.customerBadgeText}>C{index + 1}</Text>
+                                </View>
+                                <Text style={[styles.orderCardId, { color: colors.primary }]}>#{o.id}</Text>
+                              </View>
+                              <View style={[styles.orderTypePill, { backgroundColor: '#fff7ed' }]}>
+                                <Text style={styles.orderTypePillText}>
+                                  {o.orderType === 'dine-in' ? '🍽' : o.orderType === 'takeaway' ? '🛵' : '🌐'}  {o.orderType}
+                                </Text>
+                              </View>
+                              {hasCounts && (
+                                <View style={styles.kitchenCountsRow}>
+                                  {(o.pendingItems ?? 0) > 0 && (
+                                    <View style={[styles.kitchenCountPill, { backgroundColor: '#fef3c7' }]}>
+                                      <Text style={[styles.kitchenCountText, { color: '#92400e' }]}>⏳ {o.pendingItems}</Text>
+                                    </View>
+                                  )}
+                                  {(o.preparingItems ?? 0) > 0 && (
+                                    <View style={[styles.kitchenCountPill, { backgroundColor: '#fff7ed' }]}>
+                                      <Text style={[styles.kitchenCountText, { color: colors.primary }]}>🔥 {o.preparingItems}</Text>
+                                    </View>
+                                  )}
+                                  {(o.readyItems ?? 0) > 0 && (
+                                    <View style={[styles.kitchenCountPill, { backgroundColor: '#f0fdf4' }]}>
+                                      <Text style={[styles.kitchenCountText, { color: colors.green }]}>✓ {o.readyItems}</Text>
+                                    </View>
+                                  )}
+                                </View>
+                              )}
+                            </View>
+                            <View style={styles.orderCardRight}>
+                              {badge && (
+                                <View style={[styles.orderStatusBadge, { backgroundColor: badge.bg }]}>
+                                  <Text style={[styles.orderStatusText, { color: badge.color }]}>{badge.label}</Text>
+                                </View>
+                              )}
+                              <Text style={[styles.orderCardAmount, { color: c.textPrimary }]}>₹{Number(o.subtotal).toLocaleString()}</Text>
+                              <Text style={[styles.orderCardItems, { color: c.textMuted }]}>{o.itemCount} item{o.itemCount !== 1 ? 's' : ''}</Text>
                             </View>
                           </View>
-                          <View style={styles.orderCardRight}>
-                            {badge && (
-                              <View style={[styles.orderStatusBadge, { backgroundColor: badge.bg }]}>
-                                <Text style={[styles.orderStatusText, { color: badge.color }]}>{badge.label}</Text>
-                              </View>
+                          {/* Button row */}
+                          <View style={styles.orderCardBtns}>
+                            {o.status !== 'billing' && (
+                              <TouchableOpacity
+                                style={[styles.orderCardBtn, { backgroundColor: colors.blueLt }]}
+                                onPress={() => {
+                                  const tableId = selected!.id;
+                                  setSelected(null);
+                                  navigateTo('orders', { tableId, orderId: o.id });
+                                }}
+                              >
+                                <Text style={[styles.orderCardBtnText, { color: colors.blue }]}>+ Add Items</Text>
+                              </TouchableOpacity>
                             )}
-                            <Text style={[styles.orderCardAmount, { color: c.textPrimary }]}>₹{Number(o.subtotal).toLocaleString()}</Text>
-                            <Text style={[styles.orderCardItems, { color: c.textMuted }]}>{o.itemCount} items</Text>
                             {o.status !== 'billing' ? (
                               <TouchableOpacity
-                                style={[styles.generateBillBtn, { opacity: actionLoading ? 0.6 : 1 }]}
+                                style={[styles.orderCardBtn, { backgroundColor: colors.purpleLt, opacity: actionLoading ? 0.6 : 1 }]}
                                 onPress={() => generateBill(o.id)}
                                 disabled={actionLoading}
                               >
-                                <Text style={styles.generateBillText}>💳 Generate Bill</Text>
+                                <Text style={[styles.orderCardBtnText, { color: colors.purple }]}>💳 Bill</Text>
                               </TouchableOpacity>
                             ) : (
-                              <View style={[styles.generateBillBtn, { backgroundColor: colors.purple }]}>
-                                <Text style={styles.generateBillText}>Process Payment →</Text>
+                              <View style={[styles.orderCardBtn, { backgroundColor: colors.purpleLt, flex: 1 }]}>
+                                <Text style={[styles.orderCardBtnText, { color: colors.purple }]}>Process Payment →</Text>
                               </View>
                             )}
                           </View>
@@ -361,7 +436,9 @@ export default function TablesScreen() {
                     }}
                   >
                     <Text style={styles.sheetBtnText}>
-                      {(selected.activeOrders?.length ?? 0) > 0 ? '➕  New Order (2nd Customer)' : '🍽  Add Order'}
+                      {(selected.activeOrders?.length ?? 0) > 0
+                        ? `➕  New Order — Customer ${(selected.activeOrders?.length ?? 0) + 1}`
+                        : '🍽  Add Order'}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -387,6 +464,118 @@ export default function TablesScreen() {
                   </TouchableOpacity>
                 )}
               </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Zone Picker Modal */}
+      {zonePickerOpen && (
+        <Modal visible animationType="fade" transparent onRequestClose={() => setZonePickerOpen(false)}>
+          <View style={styles.pickerOverlay}>
+            <TouchableOpacity style={styles.pickerBackdrop} activeOpacity={1} onPress={() => setZonePickerOpen(false)} />
+            <View style={[styles.pickerSheet, { backgroundColor: c.card }]}>
+              <Text style={[styles.pickerTitle, { color: c.textPrimary }]}>Select Zone</Text>
+              {ZONES.map(z => (
+                <TouchableOpacity
+                  key={z.key}
+                  style={[styles.pickerOption, zoneFilter === z.key && { backgroundColor: c.inputBg }]}
+                  onPress={() => { setZoneFilter(z.key); setZonePickerOpen(false); }}
+                >
+                  <Text style={styles.pickerOptionIcon}>{z.icon}</Text>
+                  <Text style={[styles.pickerOptionText, { color: c.textPrimary }, zoneFilter === z.key && { color: colors.primary, fontWeight: '700' }]}>
+                    {z.label}
+                  </Text>
+                  {zoneFilter === z.key && <Text style={{ color: colors.primary, marginLeft: 'auto', fontWeight: '700' }}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Status Picker Modal */}
+      {statusPickerOpen && (
+        <Modal visible animationType="fade" transparent onRequestClose={() => setStatusPickerOpen(false)}>
+          <View style={styles.pickerOverlay}>
+            <TouchableOpacity style={styles.pickerBackdrop} activeOpacity={1} onPress={() => setStatusPickerOpen(false)} />
+            <View style={[styles.pickerSheet, { backgroundColor: c.card }]}>
+              <Text style={[styles.pickerTitle, { color: c.textPrimary }]}>Filter by Status</Text>
+              {STATUS_FILTERS.map(f => (
+                <TouchableOpacity
+                  key={f.key}
+                  style={[styles.pickerOption, filter === f.key && { backgroundColor: c.inputBg }]}
+                  onPress={() => { setFilter(f.key); setStatusPickerOpen(false); }}
+                >
+                  <Text style={[styles.pickerOptionText, { color: c.textPrimary }, filter === f.key && { color: colors.primary, fontWeight: '700' }]}>
+                    {f.label}
+                  </Text>
+                  {filter === f.key && <Text style={{ color: colors.primary, marginLeft: 'auto', fontWeight: '700' }}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Kitchen Popup Modal */}
+      {kitchenPopup && (
+        <Modal visible animationType="fade" transparent onRequestClose={() => setKitchenPopup(null)}>
+          <View style={styles.centeredOverlay}>
+            <View style={[styles.centeredSheet, { backgroundColor: c.card }]}>
+              <View style={styles.kitchenModalHeader}>
+                <Text style={[styles.kitchenModalTitle, { color: c.textPrimary }]}>
+                  👨‍🍳  Table {kitchenPopup.number} — Kitchen
+                </Text>
+                <TouchableOpacity onPress={() => setKitchenPopup(null)}>
+                  <Text style={[styles.sheetClose, { color: c.textMuted }]}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {kitchenPopup.activeOrders.map((o, i) => {
+                const badge = orderStatusBadge[o.status];
+                return (
+                  <View key={o.id} style={[styles.kitchenOrderRow, { backgroundColor: c.inputBg, borderColor: c.cardBorder }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.kitchenCustomerLabel, { color: colors.primary }]}>Customer {i + 1}</Text>
+                      <Text style={[styles.kitchenOrderId, { color: c.textSecondary }]}>
+                        Order #{o.id} · {o.itemCount} item{o.itemCount !== 1 ? 's' : ''}
+                      </Text>
+                      <View style={[styles.kitchenCountsRow, { marginTop: 6 }]}>
+                        {(o.pendingItems ?? 0) > 0 && (
+                          <View style={[styles.kitchenCountPill, { backgroundColor: '#fef3c7' }]}>
+                            <Text style={[styles.kitchenCountText, { color: '#92400e' }]}>⏳ {o.pendingItems} pending</Text>
+                          </View>
+                        )}
+                        {(o.preparingItems ?? 0) > 0 && (
+                          <View style={[styles.kitchenCountPill, { backgroundColor: '#fff7ed' }]}>
+                            <Text style={[styles.kitchenCountText, { color: colors.primary }]}>🔥 {o.preparingItems} cooking</Text>
+                          </View>
+                        )}
+                        {(o.readyItems ?? 0) > 0 && (
+                          <View style={[styles.kitchenCountPill, { backgroundColor: '#f0fdf4' }]}>
+                            <Text style={[styles.kitchenCountText, { color: colors.green }]}>✓ {o.readyItems} ready</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    {badge && (
+                      <View style={[styles.kitchenStatusPill, { backgroundColor: badge.bg }]}>
+                        <Text style={[styles.kitchenStatusText, { color: badge.color }]}>{badge.label}</Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+
+              <View style={[styles.kitchenTotalRow, { borderTopColor: c.cardBorder }]}>
+                <Text style={[styles.kitchenTotalLabel, { color: c.textSecondary }]}>
+                  {kitchenPopup.activeOrders.length} order{kitchenPopup.activeOrders.length !== 1 ? 's' : ''} active
+                </Text>
+                <Text style={[styles.kitchenTotalAmt, { color: colors.primary }]}>
+                  ₹{kitchenPopup.activeOrders.reduce((s, o) => s + Number(o.subtotal), 0).toLocaleString()}
+                </Text>
+              </View>
             </View>
           </View>
         </Modal>
@@ -494,24 +683,22 @@ export default function TablesScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.gray50 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  zoneBar: { backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.gray200, maxHeight: 72 },
-  zoneContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
-  zoneBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: colors.gray100 },
-  zoneBtnActive: { backgroundColor: colors.primary },
-  zoneIcon: { fontSize: 13 },
-  zoneText: { fontSize: 12, fontWeight: '500', color: colors.gray600 },
-  zoneTextActive: { color: colors.white },
-  statusRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.gray200, paddingRight: 12 },
-  statusContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
-  filterBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: colors.gray100 },
-  filterBtnActive: { backgroundColor: colors.gray900 },
-  filterText: { fontSize: 12, fontWeight: '500', color: colors.gray600 },
-  filterTextActive: { color: colors.white },
-  addBtn: { backgroundColor: colors.primary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginLeft: 4 },
+
+  // Compact filter row
+  filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.gray200 },
+  dropdownPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, borderWidth: 1, maxWidth: 130 },
+  dropdownIcon: { fontSize: 13 },
+  dropdownText: { fontSize: 12, fontWeight: '500', color: colors.gray600, flexShrink: 1 },
+  dropdownArrow: { fontSize: 10, color: colors.gray400 },
+  addBtn: { backgroundColor: colors.primary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   addBtnText: { fontSize: 12, fontWeight: '700', color: colors.white },
+  refreshPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
+  refreshPillText: { fontSize: 14, fontWeight: '600' },
+
+  // Table grid
   grid: { padding: 16, gap: 12 },
-  tableCard: { flex: 1, borderRadius: 16, padding: 14, borderWidth: 2, borderColor: 'transparent' },
-  tableCardSelected: { borderColor: colors.primary },
+  tableCard: { flex: 1, borderRadius: 16, padding: 14, borderWidth: 2, borderColor: 'rgba(0,0,0,0.04)' },
+  tableCardSelected: { borderColor: colors.gray900, borderWidth: 2.5, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowRadius: 8, shadowOpacity: 0.12 },
   tableHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   tableNum: { fontSize: 20, fontWeight: '800', color: colors.gray900 },
   dot: { width: 10, height: 10, borderRadius: 5 },
@@ -521,9 +708,16 @@ const styles = StyleSheet.create({
   tableMeta: { fontSize: 11, color: colors.gray500, marginBottom: 2 },
   actionBtn: { marginTop: 10, borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
   actionBtnText: { fontSize: 12, fontWeight: '700', color: colors.white },
+
+  // Kitchen status badge on card
+  kitchenBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+  chefEmoji: { fontSize: 12 },
+  kitchenBadgePill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8 },
+  kitchenBadgeText: { fontSize: 10, fontWeight: '700' },
+
   // Bottom Sheet
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
-  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  sheetBackdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: { backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingTop: 12, maxHeight: '80%' },
   sheetHandle: { width: 40, height: 4, backgroundColor: colors.gray200, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
@@ -534,20 +728,52 @@ const styles = StyleSheet.create({
   sheetVal: { fontSize: 14, fontWeight: '600', color: colors.gray900 },
   ordersSection: { marginTop: 14 },
   ordersSectionTitle: { fontSize: 11, fontWeight: '700', color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 },
-  orderCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', backgroundColor: colors.gray50, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.gray200 },
-  orderCardLeft: { gap: 4 },
+  orderCard: { backgroundColor: colors.gray50, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.gray200 },
+  orderCardMain: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  orderCardLeft: { flex: 1, gap: 4, marginRight: 8 },
+  customerLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  customerBadge: { backgroundColor: '#fff7ed', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  customerBadgeText: { fontSize: 10, fontWeight: '800', color: colors.primary },
   orderCardId: { fontSize: 14, fontWeight: '700', color: colors.primary },
-  orderTypePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  orderTypePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, alignSelf: 'flex-start' },
   orderTypePillText: { fontSize: 11, fontWeight: '600', color: colors.primary },
+  kitchenCountsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
+  kitchenCountPill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  kitchenCountText: { fontSize: 10, fontWeight: '700' },
   orderCardRight: { alignItems: 'flex-end', gap: 4 },
   orderStatusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   orderStatusText: { fontSize: 11, fontWeight: '600' },
   orderCardAmount: { fontSize: 15, fontWeight: '800', color: colors.gray900 },
   orderCardItems: { fontSize: 11, color: colors.gray400 },
+  orderCardBtns: { flexDirection: 'row', gap: 6 },
+  orderCardBtn: { flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: 'center' },
+  orderCardBtnText: { fontSize: 11, fontWeight: '700' },
   generateBillBtn: { backgroundColor: colors.purple, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginTop: 2 },
   generateBillText: { fontSize: 11, fontWeight: '700', color: colors.white },
   sheetBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   sheetBtnText: { fontSize: 15, fontWeight: '700', color: colors.white },
+
+  // Picker modals (zone / status)
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  pickerBackdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
+  pickerSheet: { backgroundColor: colors.white, borderRadius: 20, padding: 20, width: '100%', maxWidth: 340 },
+  pickerTitle: { fontSize: 15, fontWeight: '700', color: colors.gray900, marginBottom: 12 },
+  pickerOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 10, borderRadius: 10, marginBottom: 2 },
+  pickerOptionIcon: { fontSize: 18, marginRight: 10 },
+  pickerOptionText: { fontSize: 14, color: colors.gray700, flex: 1 },
+
+  // Kitchen popup modal
+  kitchenModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  kitchenModalTitle: { fontSize: 15, fontWeight: '700', color: colors.gray900 },
+  kitchenOrderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.gray50, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.gray200 },
+  kitchenCustomerLabel: { fontSize: 11, fontWeight: '800', color: colors.primary, marginBottom: 2 },
+  kitchenOrderId: { fontSize: 13, fontWeight: '500', color: colors.gray600 },
+  kitchenStatusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  kitchenStatusText: { fontSize: 11, fontWeight: '700' },
+  kitchenTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.gray100 },
+  kitchenTotalLabel: { fontSize: 13, color: colors.gray500 },
+  kitchenTotalAmt: { fontSize: 16, fontWeight: '800', color: colors.primary },
+
   // Centered modals
   centeredOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   centeredSheet: { backgroundColor: colors.white, borderRadius: 20, padding: 24, width: '100%', maxWidth: 380 },
@@ -560,7 +786,8 @@ const styles = StyleSheet.create({
   modalCancelText: { fontSize: 14, fontWeight: '600', color: colors.gray600 },
   modalConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   modalConfirmText: { fontSize: 14, fontWeight: '700', color: colors.white },
-  zonePill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: colors.gray100 },
+  zonePill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: colors.gray100, borderWidth: 1 },
   zonePillActive: { backgroundColor: colors.primary },
   zonePillText: { fontSize: 12, fontWeight: '500', color: colors.gray600 },
+  zoneIcon: { fontSize: 13 },
 });

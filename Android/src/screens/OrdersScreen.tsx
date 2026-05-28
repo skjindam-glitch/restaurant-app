@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useShellNavigation } from '../navigation/AppNavigator';
 import { api } from '../api/client';
-import type { MenuItemDto, TableDto } from '../api/types';
+import type { MenuItemDto, TableDto, OrderDto } from '../api/types';
 import { mockMenuItems, categories as mockCategories } from '../data/mockData';
 import { colors } from '../theme/colors';
 import { useTheme } from '../context/ThemeContext';
@@ -17,6 +17,12 @@ const ORDER_TYPES = [
   { value: 'takeaway', label: '🛵 Takeaway' },
   { value: 'online',   label: '🌐 Online'   },
 ];
+
+const kitchenStatusLabel: Record<string, string> = {
+  pending:   '⏳ Pending',
+  preparing: '🔥 Cooking',
+  ready:     '✓ Ready',
+};
 
 export default function OrdersScreen() {
   const { params } = useShellNavigation();
@@ -34,18 +40,26 @@ export default function OrdersScreen() {
   const [success, setSuccess] = useState('');
   const [selectedTableId, setSelectedTableId] = useState<number>(0);
   const [orderType, setOrderType] = useState('dine-in');
+  const [existingOrder, setExistingOrder] = useState<OrderDto | null>(null);
+
+  const orderId = params?.orderId as number | undefined;
+  const isAddMode = !!orderId;
 
   const fetchData = useCallback(async () => {
     try {
-      const [menuData, tableData] = await Promise.all([
+      const fetchList: Promise<unknown>[] = [
         api.get<MenuItemDto[]>('/api/menu'),
         api.get<TableDto[]>('/api/tables'),
-      ]);
+      ];
+      if (orderId) fetchList.push(api.get<OrderDto>(`/api/orders/${orderId}`));
+
+      const [menuData, tableData, existingOrd] = await Promise.all(fetchList) as [MenuItemDto[], TableDto[], OrderDto?];
       setMenuItems(menuData);
       const uniqueCats = ['All', ...Array.from(new Set(menuData.map(i => i.category)))];
       setCats(uniqueCats);
       const activeTables = tableData.filter(t => t.status === 'available' || t.status === 'occupied');
       setTables(activeTables);
+      if (existingOrd) setExistingOrder(existingOrd);
       // Pre-select table from navigation params, else first available
       const paramTableId = params?.tableId;
       if (paramTableId) {
@@ -59,7 +73,7 @@ export default function OrdersScreen() {
     } finally {
       setLoading(false);
     }
-  }, [params?.tableId]);
+  }, [params?.tableId, orderId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -91,19 +105,30 @@ export default function OrdersScreen() {
   const removeItem = (id: number) => setCart(prev => prev.filter(c => c.id !== id));
 
   const sendToKitchen = async () => {
-    if (cart.length === 0 || !selectedTableId) return;
+    if (cart.length === 0) return;
     setSubmitting(true);
     setError('');
     try {
-      const order = await api.post<{ id: number }>('/api/orders', {
-        tableId: selectedTableId,
-        items: cart.map(c => ({ menuItemId: c.id, quantity: c.qty })),
-        orderType,
-      });
-      await api.post(`/api/orders/${order.id}/send-to-kitchen`, {});
-      setSuccess(`Order #${order.id} sent to kitchen!`);
-      setCart([]);
-      setShowCart(false);
+      if (isAddMode && orderId) {
+        await api.post(`/api/orders/${orderId}/add-items`, {
+          items: cart.map(c => ({ menuItemId: c.id, quantity: c.qty })),
+        });
+        const totalAdded = cart.reduce((s, c) => s + c.qty, 0);
+        setSuccess(`${totalAdded} item${totalAdded !== 1 ? 's' : ''} added to Order #${orderId}!`);
+        setCart([]);
+        setShowCart(false);
+      } else {
+        if (!selectedTableId) return;
+        const order = await api.post<{ id: number }>('/api/orders', {
+          tableId: selectedTableId,
+          items: cart.map(c => ({ menuItemId: c.id, quantity: c.qty })),
+          orderType,
+        });
+        await api.post(`/api/orders/${order.id}/send-to-kitchen`, {});
+        setSuccess(`Order #${order.id} sent to kitchen!`);
+        setCart([]);
+        setShowCart(false);
+      }
       setTimeout(() => setSuccess(''), 4000);
     } catch (err) {
       setError((err as Error).message);
@@ -118,11 +143,11 @@ export default function OrdersScreen() {
   if (success && !showCart) {
     return (
       <View style={[styles.root, styles.center, { backgroundColor: c.bg }]}>
-        <Text style={{ fontSize: 64, marginBottom: 20 }}>🍽</Text>
-        <Text style={[styles.sentTitle, { color: c.textPrimary }]}>Order Sent to Kitchen!</Text>
+        <Text style={{ fontSize: 64, marginBottom: 20 }}>{isAddMode ? '✅' : '🍽'}</Text>
+        <Text style={[styles.sentTitle, { color: c.textPrimary }]}>{isAddMode ? 'Items Added!' : 'Order Sent to Kitchen!'}</Text>
         <Text style={[styles.sentSub, { color: c.textMuted }]}>{success}</Text>
         <TouchableOpacity style={styles.newOrderBtn} onPress={() => setSuccess('')}>
-          <Text style={styles.newOrderBtnText}>New Order</Text>
+          <Text style={styles.newOrderBtnText}>{isAddMode ? 'Add More Items' : 'New Order'}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -137,27 +162,46 @@ export default function OrdersScreen() {
             <Text style={styles.backBtn}>← Menu</Text>
           </TouchableOpacity>
           <Text style={[styles.cartTitle, { color: c.textPrimary }]}>
-            {selectedTable ? `T${selectedTable.number}` : 'Order'} · {totalItems} items
+            {isAddMode ? `Add to Order #${orderId}` : `${selectedTable ? `T${selectedTable.number}` : 'Order'} · ${totalItems} items`}
           </Text>
           <TouchableOpacity onPress={() => setCart([])}>
             <Text style={styles.clearBtn}>Clear</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Order Type */}
-        <View style={[styles.orderTypeRow, { backgroundColor: c.header, borderBottomColor: c.headerBorder }]}>
-          {ORDER_TYPES.map(t => (
-            <TouchableOpacity
-              key={t.value}
-              onPress={() => setOrderType(t.value)}
-              style={[styles.orderTypeBtn, { backgroundColor: c.chipBg }, orderType === t.value && styles.orderTypeBtnActive]}
-            >
-              <Text style={[styles.orderTypeText, { color: c.textSecondary }, orderType === t.value && { color: colors.white }]}>{t.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Order Type — hidden in add mode */}
+        {!isAddMode && (
+          <View style={[styles.orderTypeRow, { backgroundColor: c.header, borderBottomColor: c.headerBorder }]}>
+            {ORDER_TYPES.map(t => (
+              <TouchableOpacity
+                key={t.value}
+                onPress={() => setOrderType(t.value)}
+                style={[styles.orderTypeBtn, { backgroundColor: c.chipBg }, orderType === t.value && styles.orderTypeBtnActive]}
+              >
+                <Text style={[styles.orderTypeText, { color: c.textSecondary }, orderType === t.value && { color: colors.white }]}>{t.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <ScrollView style={styles.cartList}>
+          {/* Already in kitchen section (add mode only) */}
+          {isAddMode && existingOrder && existingOrder.items.length > 0 && (
+            <View style={styles.existingSection}>
+              <Text style={[styles.existingSectionTitle, { color: c.textMuted }]}>Already in Kitchen</Text>
+              {existingOrder.items.map(item => (
+                <View key={item.id} style={[styles.existingItem, { backgroundColor: c.inputBg, borderColor: c.cardBorder }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.existingItemName, { color: c.textSecondary }]}>{item.name} ×{item.quantity}</Text>
+                    <Text style={[styles.existingItemStatus, { color: c.textMuted }]}>{kitchenStatusLabel[item.kitchenStatus] ?? item.kitchenStatus}</Text>
+                  </View>
+                  <Text style={[styles.existingItemAmt, { color: c.textMuted }]}>₹{(item.price * item.quantity).toLocaleString()}</Text>
+                </View>
+              ))}
+              <Text style={[styles.newItemsLabel, { color: colors.primary }]}>New Items</Text>
+            </View>
+          )}
+
           {cart.map(item => (
             <View key={item.id} style={[styles.cartItem, { backgroundColor: c.card, borderBottomColor: c.cardBorder }]}>
               <View style={[styles.vegDot, { backgroundColor: item.veg ? colors.green : colors.red }]} />
@@ -182,22 +226,30 @@ export default function OrdersScreen() {
         </ScrollView>
 
         <View style={[styles.cartSummary, { backgroundColor: c.card, borderTopColor: c.cardBorder }]}>
-          <View style={styles.summaryRow}><Text style={[styles.summaryKey, { color: c.textSecondary }]}>Subtotal</Text><Text style={[styles.summaryVal, { color: c.textPrimary }]}>₹{subtotal.toLocaleString()}</Text></View>
-          <View style={styles.summaryRow}><Text style={[styles.summaryKey, { color: c.textSecondary }]}>Tax (5%)</Text><Text style={[styles.summaryVal, { color: c.textPrimary }]}>₹{tax.toLocaleString()}</Text></View>
-          <View style={styles.summaryRow}><Text style={[styles.summaryKey, { color: c.textSecondary }]}>Service (5%)</Text><Text style={[styles.summaryVal, { color: c.textPrimary }]}>₹{service.toLocaleString()}</Text></View>
-          <View style={[styles.summaryRow, styles.totalRow, { borderTopColor: c.cardBorder }]}>
-            <Text style={[styles.totalKey, { color: c.textPrimary }]}>Total</Text>
-            <Text style={styles.totalVal}>₹{total.toLocaleString()}</Text>
-          </View>
+          {!isAddMode && <>
+            <View style={styles.summaryRow}><Text style={[styles.summaryKey, { color: c.textSecondary }]}>Subtotal</Text><Text style={[styles.summaryVal, { color: c.textPrimary }]}>₹{subtotal.toLocaleString()}</Text></View>
+            <View style={styles.summaryRow}><Text style={[styles.summaryKey, { color: c.textSecondary }]}>Tax (5%)</Text><Text style={[styles.summaryVal, { color: c.textPrimary }]}>₹{tax.toLocaleString()}</Text></View>
+            <View style={styles.summaryRow}><Text style={[styles.summaryKey, { color: c.textSecondary }]}>Service (5%)</Text><Text style={[styles.summaryVal, { color: c.textPrimary }]}>₹{service.toLocaleString()}</Text></View>
+            <View style={[styles.summaryRow, styles.totalRow, { borderTopColor: c.cardBorder }]}>
+              <Text style={[styles.totalKey, { color: c.textPrimary }]}>Total</Text>
+              <Text style={styles.totalVal}>₹{total.toLocaleString()}</Text>
+            </View>
+          </>}
+          {isAddMode && (
+            <View style={[styles.summaryRow, { marginBottom: 4 }]}>
+              <Text style={[styles.summaryKey, { color: c.textSecondary }]}>New items subtotal</Text>
+              <Text style={[styles.summaryVal, { color: c.textPrimary }]}>₹{subtotal.toLocaleString()}</Text>
+            </View>
+          )}
           {error ? <Text style={styles.errorText}>⚠️  {error}</Text> : null}
           <TouchableOpacity
-            style={[styles.sendBtn, (submitting || !selectedTableId) && { opacity: 0.7 }]}
+            style={[styles.sendBtn, (submitting || (!isAddMode && !selectedTableId)) && { opacity: 0.7 }]}
             onPress={sendToKitchen}
-            disabled={submitting || !selectedTableId}
+            disabled={submitting || (!isAddMode && !selectedTableId)}
           >
             {submitting
               ? <ActivityIndicator color={colors.white} />
-              : <Text style={styles.sendBtnText}>🍽  Send to Kitchen</Text>
+              : <Text style={styles.sendBtnText}>{isAddMode ? '➕  Add to Order' : '🍽  Send to Kitchen'}</Text>
             }
           </TouchableOpacity>
         </View>
@@ -369,4 +421,11 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, color: colors.red, marginBottom: 8, fontWeight: '500' },
   sendBtn: { backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 12 },
   sendBtnText: { fontSize: 15, fontWeight: '700', color: colors.white },
+  existingSection: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 4 },
+  existingSectionTitle: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 },
+  existingItem: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, borderWidth: 1, marginBottom: 6, opacity: 0.7 },
+  existingItemName: { fontSize: 13, fontWeight: '600' },
+  existingItemStatus: { fontSize: 11, marginTop: 1 },
+  existingItemAmt: { fontSize: 13, fontWeight: '600', marginLeft: 8 },
+  newItemsLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, color: colors.primary, marginTop: 8, marginBottom: 4 },
 });

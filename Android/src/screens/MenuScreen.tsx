@@ -123,7 +123,7 @@ export default function MenuScreen() {
   const toggleAvailability = async (item: MenuItemDto) => {
     setTogglingId(item.id);
     try {
-      const updated = await api.patch<MenuItemDto>(`/api/menu/${item.id}/availability`);
+      const updated = await api.patch<MenuItemDto>(`/api/menu/${item.id}/availability`, {});
       setItems(prev => prev.map(i => i.id === item.id ? updated : i));
     } catch { /* ignore */ } finally {
       setTogglingId(null);

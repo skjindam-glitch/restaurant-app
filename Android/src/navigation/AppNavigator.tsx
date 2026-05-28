@@ -352,7 +352,7 @@ const shell = StyleSheet.create({
   menuLine: { height: 2, width: 22, borderRadius: 1 },
   screenTitle: { fontSize: 17, fontWeight: '700', letterSpacing: -0.3 },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.55)',
     zIndex: 10,
   },
