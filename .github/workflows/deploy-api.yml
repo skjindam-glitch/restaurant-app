@@ -38,14 +38,12 @@ jobs:
       - name: Run tests
         run: dotnet test ${{ env.TESTS_PATH }} --configuration Release
 
-      # Self-contained Windows x64 publish — bundles .NET 9 runtime so no
-      # runtime needs to be pre-installed on the Windows App Service.
-      - name: Publish (self-contained, win-x64)
+      # Framework-dependent publish — App Service has .NET 9 installed.
+      # Avoids the 32-bit/64-bit DLL mismatch that self-contained win-x64 causes.
+      - name: Publish (framework-dependent)
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} \
             --configuration Release \
-            --self-contained true \
-            --runtime win-x64 \
             --output ${{ env.PUBLISH_DIR }}
 
       - name: Zip publish output
